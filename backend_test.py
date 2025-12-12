@@ -572,6 +572,12 @@ class MediNexusAPITester:
             self.test_appointments()
             self.test_vitals()
             self.test_twin_core()
+            # Phase 1 expansion tests
+            self.test_video_calls()
+            self.test_health_sync()
+            self.test_radiology_ai()
+            self.test_b2b_clinic()
+            self.test_notifications()
             
         except KeyboardInterrupt:
             self.log("❌ Tests interrupted by user", "ERROR")
