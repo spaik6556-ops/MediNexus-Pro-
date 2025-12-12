@@ -1,0 +1,133 @@
+{
+  "brand_identity": {
+    "name": "MediNexus Pro+",
+    "archetype": "Bio-Metric Clarity",
+    "core_values": ["Precision", "Empathy", "Transparency", "Future-Ready"],
+    "voice": "Professional, Reassuring, Data-Driven, Human",
+    "theme_mode": "light"
+  },
+  "design_system": {
+    "colors": {
+      "primary": {
+        "DEFAULT": "#0F766E",
+        "foreground": "#FFFFFF",
+        "50": "#F0FDFA",
+        "100": "#CCFBF1",
+        "200": "#99F6E4",
+        "300": "#5EEAD4",
+        "400": "#2DD4BF",
+        "500": "#14B8A6",
+        "600": "#0D9488",
+        "700": "#0F766E",
+        "800": "#115E59",
+        "900": "#134E4A"
+      },
+      "secondary": {
+        "DEFAULT": "#F5F5F4",
+        "foreground": "#1C1917"
+      },
+      "accent": {
+        "DEFAULT": "#F43F5E",
+        "foreground": "#FFFFFF"
+      },
+      "background": "#FAFAF9",
+      "surface": "#FFFFFF",
+      "text": {
+        "primary": "#1C1917",
+        "secondary": "#57534E",
+        "muted": "#A8A29E"
+      },
+      "border": "#E7E5E4",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444"
+    },
+    "typography": {
+      "font_family": {
+        "heading": "Manrope, sans-serif",
+        "body": "Inter, sans-serif",
+        "mono": "JetBrains Mono, monospace"
+      },
+      "scale": {
+        "h1": "text-4xl md:text-5xl font-bold tracking-tight",
+        "h2": "text-3xl font-semibold tracking-tight",
+        "h3": "text-2xl font-semibold",
+        "body_lg": "text-lg leading-relaxed",
+        "body": "text-base leading-relaxed",
+        "caption": "text-sm text-stone-500"
+      }
+    },
+    "spacing": {
+      "container_padding": "p-6 md:p-8 lg:p-12",
+      "section_gap": "gap-8 md:gap-12",
+      "element_gap": "gap-4"
+    },
+    "visual_enhancers": {
+      "radius": "rounded-2xl",
+      "shadows": {
+        "card": "shadow-[0_2px_8px_rgba(0,0,0,0.04)]",
+        "float": "shadow-[0_8px_30px_rgba(0,0,0,0.08)]"
+      },
+      "glassmorphism": "bg-white/80 backdrop-blur-xl border border-white/20",
+      "gradients": {
+        "subtle_glow": "bg-gradient-to-br from-teal-50 to-stone-50",
+        "active_state": "bg-gradient-to-r from-teal-600 to-teal-500"
+      }
+    }
+  },
+  "assets": {
+    "images": {
+      "doctor_profile": "https://images.unsplash.com/photo-1758691461516-7e716e0ca135?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=85",
+      "doctor_young": "https://images.unsplash.com/photo-1758691463626-0ab959babe00?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=85",
+      "patient_happy": "https://images.pexels.com/photos/3845759/pexels-photo-3845759.jpeg",
+      "abstract_bio": "https://images.unsplash.com/photo-1582865605311-bb6a6341e814?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=85",
+      "brain_ai": "https://images.unsplash.com/photo-1676799910130-81f30074775d?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=85",
+      "hospital_hero": "https://images.unsplash.com/photo-1764885518098-781b23d50e7f?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=85"
+    },
+    "icons": {
+      "library": "lucide-react",
+      "style": "Stroke width 1.5px, rounded caps"
+    }
+  },
+  "components": {
+    "DigitalTwinCore": {
+      "description": "The central visual element. A 3D or pseudo-3D representation of the patient's health status.",
+      "implementation": "Use 'react-three-fiber' to render a rotating, abstract human mesh or a glowing sphere. If 3D is too heavy, use the 'abstract_bio' image with a pulse animation overlay.",
+      "style": "Container must be 'glassmorphic' with a subtle inner glow. Positioned centrally in the dashboard."
+    },
+    "Timeline": {
+      "description": "Vertical stream of medical events.",
+      "style": "Use a 'Tracing Beam' effect. A vertical line that lights up as you scroll. Nodes should be circular with icons inside. Active node pulses.",
+      "interaction": "Hovering a node expands it to show details (Doc Hub preview)."
+    },
+    "SymptomChecker": {
+      "description": "AI Chat interface.",
+      "style": "Floating panel or drawer. Use 'brain_ai' image as a subtle background opacity (5%). Chat bubbles should be 'clay' style (soft shadow, rounded).",
+      "animation": "Messages should stagger in."
+    },
+    "VitalsCard": {
+      "description": "Small cards for Heart Rate, BP, etc.",
+      "style": "Clean white cards. Big number (Manrope font). Sparkline chart at the bottom (use Recharts).",
+      "trend_indicator": "Green arrow up/down for good, Red for bad."
+    }
+  },
+  "layout_strategies": {
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-12 gap-6 p-6",
+    "bento_rules": {
+      "twin_core": "col-span-12 md:col-span-6 lg:col-span-5 row-span-2",
+      "timeline": "col-span-12 md:col-span-3 lg:col-span-3 row-span-2",
+      "vitals": "col-span-6 md:col-span-3 lg:col-span-2",
+      "actions": "col-span-6 md:col-span-3 lg:col-span-2"
+    }
+  },
+  "universal_guidelines": [
+    "DO NOT use gradients for text.",
+    "DO NOT use pure black (#000000). Use Stone-900 (#1C1917).",
+    "Ensure all text over images has a 'backdrop-blur-md' or a subtle gradient overlay for readability.",
+    "Use 'data-testid' on all interactive elements.",
+    "Animations must be 'spring' based (use framer-motion), not linear.",
+    "Forms must use 'react-hook-form' with 'zod' validation.",
+    "All dates must be formatted using 'date-fns'."
+  ],
+  "instructions_to_main_agent": "You are building the MVP. Focus on the 'Patient Dashboard' first. Implement the 'Digital Twin' visualization using a placeholder if R3F is too complex, but the structure must be there. The 'Timeline' is the second most important feature. Use the provided image URLs for the profile and hero sections. Strictly follow the color palette."
+}
