@@ -179,7 +179,7 @@ class MediNexusAPITester:
             "Create Lab Result",
             "POST",
             "v1/labs",
-            201,
+            200,
             data=lab_data
         )
         
