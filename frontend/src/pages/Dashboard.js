@@ -240,9 +240,17 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button className="p-2 rounded-lg hover:bg-stone-100 relative">
+              <button 
+                onClick={() => setNotificationsOpen(true)}
+                className="p-2 rounded-lg hover:bg-stone-100 relative"
+                data-testid="notifications-btn"
+              >
                 <Bell className="w-5 h-5 text-stone-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 w-5 h-5 bg-rose-500 rounded-full flex items-center justify-center text-xs text-white font-bold">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </button>
               <button className="p-2 rounded-lg hover:bg-stone-100">
                 <Settings className="w-5 h-5 text-stone-600" />
@@ -250,6 +258,12 @@ const Dashboard = () => {
             </div>
           </div>
         </header>
+
+        {/* Notifications Panel */}
+        <NotificationsPanel 
+          isOpen={notificationsOpen} 
+          onClose={() => setNotificationsOpen(false)} 
+        />
 
         {/* Dashboard content */}
         <div className="p-6">
