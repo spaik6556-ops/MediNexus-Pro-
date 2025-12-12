@@ -599,14 +599,15 @@ async def create_lab_result(
     
     await db.lab_results.insert_one(lab_doc)
     
-    # Add to twin events
+    # Add to twin events (create clean copy without _id)
+    clean_lab_doc = {k: v for k, v in lab_doc.items() if k != '_id'}
     event_doc = {
         "event_id": str(uuid.uuid4()),
         "patient_id": current_user["id"],
         "timestamp": now,
         "event_type": EventType.LAB_RESULT.value,
         "source_module": SourceModule.LAB_FLOW.value,
-        "data_payload": lab_doc,
+        "data_payload": clean_lab_doc,
         "clinical_confidence": 1.0,
         "access_scope": ["patient", "primary_doctor"]
     }
