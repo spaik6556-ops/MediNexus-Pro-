@@ -306,8 +306,7 @@ class MediNexusAPITester:
         
         # Test update appointment status
         if appt_id:
-            self.run_test("Cancel Appointment", "PUT", f"v1/appointments/{appt_id}/status", 200, 
-                         data={"status": "cancelled"})
+            self.run_test("Cancel Appointment", "PUT", f"v1/appointments/{appt_id}/status?status=cancelled", 200)
 
     def test_vitals(self):
         """Test vitals management"""
