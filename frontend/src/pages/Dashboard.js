@@ -186,6 +186,17 @@ const Dashboard = () => {
                 <span className="font-medium">{item.label}</span>
               </Link>
             ))}
+            {/* B2B Panel for doctors */}
+            {(user?.role === 'doctor' || user?.role === 'admin') && (
+              <Link
+                to={b2bNavItem.path}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors"
+                data-testid="nav-b2b"
+              >
+                <b2bNavItem.icon className="w-5 h-5" />
+                <span className="font-medium">{b2bNavItem.label}</span>
+              </Link>
+            )}
           </nav>
         </div>
 
