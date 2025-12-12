@@ -412,12 +412,14 @@ class MediNexusAPITester:
             "device_type": "apple_health",
             "records": [
                 {
+                    "device_type": "apple_health",
                     "data_type": "steps",
                     "value": 8500,
                     "unit": "steps",
                     "recorded_at": datetime.now().isoformat()
                 },
                 {
+                    "device_type": "apple_health",
                     "data_type": "heart_rate",
                     "value": 72,
                     "unit": "bpm",
