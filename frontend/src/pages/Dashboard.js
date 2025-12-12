@@ -60,13 +60,12 @@ const Dashboard = () => {
     { icon: TrendingUp, label: 'Анализы', path: '/labs' },
     { icon: Calendar, label: 'Записи', path: '/appointments' },
     { icon: Heart, label: 'План лечения', path: '/care-plan' },
+    { icon: Watch, label: 'Health Sync', path: '/health-sync' },
+    { icon: Scan, label: 'Radiology AI', path: '/radiology' },
   ];
 
-  // Extended nav for Phase 1
-  const extendedNavItems = [
-    { icon: Activity, label: 'Health Sync', path: '/health-sync' },
-    { icon: Brain, label: 'Radiology AI', path: '/radiology' },
-  ];
+  // B2B nav item (only for doctors/admins)
+  const b2bNavItem = { icon: Building2, label: 'B2B Панель', path: '/b2b' };
 
   const vitalCards = [
     { 
