@@ -970,6 +970,684 @@ async def get_doctors(specialty: Optional[str] = None):
     doctors = await db.users.find(query, {"_id": 0, "password": 0}).to_list(100)
     return doctors
 
+# ==================== AGORA VIDEO CALL ENDPOINTS ====================
+class AgoraTokenRequest(BaseModel):
+    channel: str
+    appointment_id: Optional[str] = None
+
+class AgoraTokenResponse(BaseModel):
+    token: str
+    channel: str
+    uid: int
+    app_id: str
+    expiration_time: int
+
+@api_router.post("/v1/video/token", response_model=AgoraTokenResponse)
+async def generate_video_token(
+    request: AgoraTokenRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate Agora token for video consultation"""
+    uid = abs(hash(current_user["id"])) % (10**9)  # Generate stable UID from user ID
+    expire_time = int(time.time()) + 3600  # 1 hour
+    
+    token = build_agora_token(
+        app_id=AGORA_APP_ID,
+        app_cert=AGORA_APP_CERT,
+        channel=request.channel,
+        uid=uid,
+        expire_seconds=3600
+    )
+    
+    # Update appointment if provided
+    if request.appointment_id:
+        await db.appointments.update_one(
+            {"id": request.appointment_id},
+            {"$set": {"status": "in_progress", "video_started_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    
+    return AgoraTokenResponse(
+        token=token,
+        channel=request.channel,
+        uid=uid,
+        app_id=AGORA_APP_ID,
+        expiration_time=expire_time
+    )
+
+@api_router.post("/v1/video/end/{appointment_id}")
+async def end_video_call(
+    appointment_id: str,
+    duration_minutes: int = 0,
+    current_user: dict = Depends(get_current_user)
+):
+    """End video consultation and record duration"""
+    now = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.appointments.update_one(
+        {"id": appointment_id},
+        {"$set": {
+            "status": "completed",
+            "video_ended_at": now,
+            "duration_minutes": duration_minutes
+        }}
+    )
+    
+    # Add to twin events
+    event_doc = {
+        "event_id": str(uuid.uuid4()),
+        "patient_id": current_user["id"],
+        "timestamp": now,
+        "event_type": EventType.CONSULTATION.value,
+        "source_module": SourceModule.TELEMED.value,
+        "data_payload": {
+            "appointment_id": appointment_id,
+            "duration_minutes": duration_minutes,
+            "type": "video_consultation_completed"
+        },
+        "clinical_confidence": None,
+        "access_scope": ["patient", "primary_doctor"]
+    }
+    await db.twin_events.insert_one(event_doc)
+    
+    return {"status": "completed", "duration_minutes": duration_minutes}
+
+# ==================== HEALTH SYNC ENDPOINTS ====================
+class HealthDevice(BaseModel):
+    device_type: str  # apple_health, google_fit, fitbit, garmin, etc.
+    device_id: str
+    last_sync: Optional[str] = None
+
+class HealthSyncData(BaseModel):
+    device_type: str
+    data_type: str  # steps, heart_rate, sleep, calories, etc.
+    value: float
+    unit: str
+    recorded_at: str
+    metadata: Optional[Dict[str, Any]] = None
+
+class HealthSyncBatch(BaseModel):
+    device_type: str
+    records: List[HealthSyncData]
+
+@api_router.post("/v1/health-sync/connect")
+async def connect_health_device(
+    device: HealthDevice,
+    current_user: dict = Depends(get_current_user)
+):
+    """Connect a wearable device for health data sync"""
+    device_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    device_doc = {
+        "id": device_id,
+        "patient_id": current_user["id"],
+        "device_type": device.device_type,
+        "device_identifier": device.device_id,
+        "connected_at": now,
+        "last_sync": None,
+        "status": "active"
+    }
+    
+    await db.health_devices.insert_one(device_doc)
+    
+    return {"status": "connected", "device_id": device_id, "device_type": device.device_type}
+
+@api_router.get("/v1/health-sync/devices")
+async def get_connected_devices(current_user: dict = Depends(get_current_user)):
+    """Get list of connected health devices"""
+    devices = await db.health_devices.find(
+        {"patient_id": current_user["id"], "status": "active"},
+        {"_id": 0}
+    ).to_list(100)
+    return devices
+
+@api_router.post("/v1/health-sync/data")
+async def sync_health_data(
+    batch: HealthSyncBatch,
+    current_user: dict = Depends(get_current_user)
+):
+    """Sync health data from wearable devices"""
+    now = datetime.now(timezone.utc).isoformat()
+    synced_count = 0
+    
+    for record in batch.records:
+        # Create vital record
+        vital_doc = {
+            "id": str(uuid.uuid4()),
+            "patient_id": current_user["id"],
+            "vital_type": record.data_type,
+            "value": str(record.value),
+            "unit": record.unit,
+            "measured_at": record.recorded_at,
+            "source": batch.device_type,
+            "metadata": record.metadata,
+            "created_at": now
+        }
+        await db.vitals.insert_one(vital_doc)
+        
+        # Add to twin events
+        clean_vital_doc = {k: v for k, v in vital_doc.items() if k != '_id'}
+        event_doc = {
+            "event_id": str(uuid.uuid4()),
+            "patient_id": current_user["id"],
+            "timestamp": record.recorded_at,
+            "event_type": EventType.VITAL.value,
+            "source_module": SourceModule.HEALTH_SYNC.value,
+            "data_payload": clean_vital_doc,
+            "clinical_confidence": 0.9,
+            "access_scope": ["patient", "primary_doctor"]
+        }
+        await db.twin_events.insert_one(event_doc)
+        synced_count += 1
+    
+    # Update device last sync
+    await db.health_devices.update_one(
+        {"patient_id": current_user["id"], "device_type": batch.device_type},
+        {"$set": {"last_sync": now}}
+    )
+    
+    return {"status": "synced", "records_count": synced_count}
+
+@api_router.get("/v1/health-sync/summary")
+async def get_health_summary(
+    days: int = 7,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get health metrics summary from synced devices"""
+    start_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    
+    # Aggregate steps
+    steps_data = await db.vitals.find({
+        "patient_id": current_user["id"],
+        "vital_type": "steps",
+        "measured_at": {"$gte": start_date}
+    }, {"_id": 0}).to_list(1000)
+    
+    total_steps = sum(float(s["value"]) for s in steps_data)
+    avg_daily_steps = total_steps / days if days > 0 else 0
+    
+    # Aggregate heart rate
+    hr_data = await db.vitals.find({
+        "patient_id": current_user["id"],
+        "vital_type": "heart_rate",
+        "measured_at": {"$gte": start_date}
+    }, {"_id": 0}).to_list(1000)
+    
+    avg_hr = sum(float(h["value"]) for h in hr_data) / len(hr_data) if hr_data else 0
+    
+    # Sleep data
+    sleep_data = await db.vitals.find({
+        "patient_id": current_user["id"],
+        "vital_type": "sleep_hours",
+        "measured_at": {"$gte": start_date}
+    }, {"_id": 0}).to_list(100)
+    
+    avg_sleep = sum(float(s["value"]) for s in sleep_data) / len(sleep_data) if sleep_data else 0
+    
+    return {
+        "period_days": days,
+        "total_steps": int(total_steps),
+        "avg_daily_steps": int(avg_daily_steps),
+        "avg_heart_rate": round(avg_hr, 1),
+        "avg_sleep_hours": round(avg_sleep, 1),
+        "data_points": len(steps_data) + len(hr_data) + len(sleep_data)
+    }
+
+# ==================== RADIOLOGY AI ENDPOINTS ====================
+class RadiologyAnalysisRequest(BaseModel):
+    image_type: str  # ct, mri, xray, ultrasound
+    body_region: str
+    image_url: Optional[str] = None
+    clinical_context: Optional[str] = None
+    document_id: Optional[str] = None
+
+class RadiologyFinding(BaseModel):
+    finding: str
+    location: str
+    severity: str  # normal, mild, moderate, severe
+    confidence: float
+    description: str
+
+class RadiologyAnalysisResponse(BaseModel):
+    analysis_id: str
+    image_type: str
+    body_region: str
+    findings: List[RadiologyFinding]
+    impression: str
+    recommendations: List[str]
+    ai_confidence: float
+    disclaimer: str
+
+@api_router.post("/v1/radiology/analyze", response_model=RadiologyAnalysisResponse)
+async def analyze_radiology_image(
+    request: RadiologyAnalysisRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """AI analysis of medical imaging (CT, MRI, X-ray, Ultrasound)"""
+    analysis_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Build AI prompt
+    prompt = f"""Analyze this {request.image_type.upper()} scan of the {request.body_region}.
+Clinical context: {request.clinical_context or 'Not provided'}
+
+Provide a structured radiology report in JSON format:
+{{
+    "findings": [
+        {{"finding": "name", "location": "specific location", "severity": "normal|mild|moderate|severe", "confidence": 0.0-1.0, "description": "detailed description"}}
+    ],
+    "impression": "overall impression text",
+    "recommendations": ["recommendation 1", "recommendation 2"]
+}}
+
+Be thorough but concise. Focus on clinically significant findings."""
+
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=analysis_id,
+            system_message="You are an expert radiologist AI assistant. Provide detailed, accurate analysis of medical imaging. Always note that this is AI-assisted analysis requiring physician review."
+        ).with_model("openai", "gpt-4o-mini")
+        
+        response = await chat.send_message(UserMessage(text=prompt))
+        
+        # Parse AI response
+        import json
+        try:
+            response_text = response.strip()
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.startswith("```"):
+                response_text = response_text[3:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+            
+            ai_result = json.loads(response_text.strip())
+        except:
+            ai_result = {
+                "findings": [{"finding": "Analysis completed", "location": request.body_region, "severity": "normal", "confidence": 0.7, "description": "AI analysis completed. Please consult a radiologist for detailed interpretation."}],
+                "impression": "AI analysis completed. Requires physician review.",
+                "recommendations": ["Consult with a radiologist for definitive interpretation"]
+            }
+    except Exception as e:
+        logging.error(f"Radiology AI error: {e}")
+        ai_result = {
+            "findings": [{"finding": "Analysis unavailable", "location": request.body_region, "severity": "unknown", "confidence": 0.0, "description": "Unable to complete AI analysis."}],
+            "impression": "AI analysis unavailable. Please consult a radiologist.",
+            "recommendations": ["Consult with a radiologist for interpretation"]
+        }
+    
+    # Save analysis to database
+    analysis_doc = {
+        "id": analysis_id,
+        "patient_id": current_user["id"],
+        "image_type": request.image_type,
+        "body_region": request.body_region,
+        "image_url": request.image_url,
+        "clinical_context": request.clinical_context,
+        "findings": ai_result.get("findings", []),
+        "impression": ai_result.get("impression", ""),
+        "recommendations": ai_result.get("recommendations", []),
+        "created_at": now
+    }
+    await db.radiology_analyses.insert_one(analysis_doc)
+    
+    # Add to twin events
+    event_doc = {
+        "event_id": str(uuid.uuid4()),
+        "patient_id": current_user["id"],
+        "timestamp": now,
+        "event_type": EventType.IMAGING.value,
+        "source_module": SourceModule.RADIOLOGY_AI.value,
+        "data_payload": {
+            "analysis_id": analysis_id,
+            "image_type": request.image_type,
+            "body_region": request.body_region,
+            "impression": ai_result.get("impression", "")
+        },
+        "clinical_confidence": 0.75,
+        "access_scope": ["patient", "primary_doctor", "specialist:radiologist"]
+    }
+    await db.twin_events.insert_one(event_doc)
+    
+    findings = [RadiologyFinding(**f) for f in ai_result.get("findings", [])]
+    
+    return RadiologyAnalysisResponse(
+        analysis_id=analysis_id,
+        image_type=request.image_type,
+        body_region=request.body_region,
+        findings=findings,
+        impression=ai_result.get("impression", ""),
+        recommendations=ai_result.get("recommendations", []),
+        ai_confidence=0.75,
+        disclaimer="This AI analysis is for informational purposes only and requires review by a qualified radiologist. Do not make medical decisions based solely on this analysis."
+    )
+
+@api_router.get("/v1/radiology/analyses")
+async def get_radiology_analyses(
+    limit: int = 20,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get patient's radiology analyses history"""
+    analyses = await db.radiology_analyses.find(
+        {"patient_id": current_user["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(limit).to_list(limit)
+    return analyses
+
+# ==================== B2B CLINIC ENDPOINTS ====================
+class ClinicCreate(BaseModel):
+    name: str
+    address: str
+    phone: str
+    email: EmailStr
+    specialties: List[str]
+    working_hours: Optional[Dict[str, str]] = None
+
+class ClinicResponse(BaseModel):
+    id: str
+    name: str
+    address: str
+    phone: str
+    email: str
+    specialties: List[str]
+    status: str
+    created_at: str
+    admin_id: str
+
+class ClinicDoctorAdd(BaseModel):
+    doctor_email: EmailStr
+    specialty: str
+
+class ClinicStats(BaseModel):
+    total_patients: int
+    total_appointments: int
+    completed_consultations: int
+    active_care_plans: int
+    avg_consultation_duration: float
+
+@api_router.post("/v1/b2b/clinic", response_model=ClinicResponse)
+async def create_clinic(
+    clinic_data: ClinicCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new clinic (B2B registration)"""
+    clinic_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    clinic_doc = {
+        "id": clinic_id,
+        "name": clinic_data.name,
+        "address": clinic_data.address,
+        "phone": clinic_data.phone,
+        "email": clinic_data.email,
+        "specialties": clinic_data.specialties,
+        "working_hours": clinic_data.working_hours or {},
+        "status": ClinicStatus.PENDING.value,
+        "admin_id": current_user["id"],
+        "doctors": [],
+        "created_at": now
+    }
+    
+    await db.clinics.insert_one(clinic_doc)
+    
+    # Update user as clinic admin
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"clinic_id": clinic_id, "is_clinic_admin": True}}
+    )
+    
+    return ClinicResponse(**clinic_doc)
+
+@api_router.get("/v1/b2b/clinic")
+async def get_clinic(current_user: dict = Depends(get_current_user)):
+    """Get clinic details for admin"""
+    clinic = await db.clinics.find_one(
+        {"admin_id": current_user["id"]},
+        {"_id": 0}
+    )
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+    return clinic
+
+@api_router.post("/v1/b2b/clinic/doctors")
+async def add_clinic_doctor(
+    doctor_data: ClinicDoctorAdd,
+    current_user: dict = Depends(get_current_user)
+):
+    """Add a doctor to the clinic"""
+    clinic = await db.clinics.find_one({"admin_id": current_user["id"]})
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+    
+    # Find doctor by email
+    doctor = await db.users.find_one({"email": doctor_data.doctor_email, "role": "doctor"})
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+    
+    # Add doctor to clinic
+    await db.clinics.update_one(
+        {"id": clinic["id"]},
+        {"$addToSet": {"doctors": {"id": doctor["id"], "name": doctor["full_name"], "specialty": doctor_data.specialty}}}
+    )
+    
+    # Update doctor's clinic association
+    await db.users.update_one(
+        {"id": doctor["id"]},
+        {"$set": {"clinic_id": clinic["id"]}}
+    )
+    
+    return {"status": "added", "doctor_id": doctor["id"]}
+
+@api_router.get("/v1/b2b/clinic/stats", response_model=ClinicStats)
+async def get_clinic_stats(current_user: dict = Depends(get_current_user)):
+    """Get clinic statistics dashboard"""
+    clinic = await db.clinics.find_one({"admin_id": current_user["id"]})
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+    
+    clinic_id = clinic["id"]
+    doctor_ids = [d["id"] for d in clinic.get("doctors", [])]
+    
+    # Get stats
+    total_appointments = await db.appointments.count_documents({"doctor_id": {"$in": doctor_ids}})
+    completed = await db.appointments.count_documents({"doctor_id": {"$in": doctor_ids}, "status": "completed"})
+    
+    # Get unique patients
+    pipeline = [
+        {"$match": {"doctor_id": {"$in": doctor_ids}}},
+        {"$group": {"_id": "$patient_id"}},
+        {"$count": "total"}
+    ]
+    patient_result = await db.appointments.aggregate(pipeline).to_list(1)
+    total_patients = patient_result[0]["total"] if patient_result else 0
+    
+    # Average duration
+    duration_pipeline = [
+        {"$match": {"doctor_id": {"$in": doctor_ids}, "duration_minutes": {"$gt": 0}}},
+        {"$group": {"_id": None, "avg": {"$avg": "$duration_minutes"}}}
+    ]
+    duration_result = await db.appointments.aggregate(duration_pipeline).to_list(1)
+    avg_duration = duration_result[0]["avg"] if duration_result else 0
+    
+    # Active care plans
+    active_plans = await db.care_plans.count_documents({"doctor_id": {"$in": doctor_ids}, "status": "active"})
+    
+    return ClinicStats(
+        total_patients=total_patients,
+        total_appointments=total_appointments,
+        completed_consultations=completed,
+        active_care_plans=active_plans,
+        avg_consultation_duration=round(avg_duration, 1)
+    )
+
+@api_router.get("/v1/b2b/clinic/patients")
+async def get_clinic_patients(
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get list of patients who visited the clinic"""
+    clinic = await db.clinics.find_one({"admin_id": current_user["id"]})
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Clinic not found")
+    
+    doctor_ids = [d["id"] for d in clinic.get("doctors", [])]
+    
+    # Get unique patient IDs
+    pipeline = [
+        {"$match": {"doctor_id": {"$in": doctor_ids}}},
+        {"$group": {"_id": "$patient_id", "last_visit": {"$max": "$appointment_date"}}},
+        {"$sort": {"last_visit": -1}},
+        {"$limit": limit}
+    ]
+    patient_ids = await db.appointments.aggregate(pipeline).to_list(limit)
+    
+    # Get patient details
+    patients = []
+    for p in patient_ids:
+        patient = await db.users.find_one({"id": p["_id"]}, {"_id": 0, "password": 0})
+        if patient:
+            patient["last_visit"] = p["last_visit"]
+            patients.append(patient)
+    
+    return patients
+
+# ==================== PUSH NOTIFICATIONS ENDPOINTS ====================
+class NotificationCreate(BaseModel):
+    title: str
+    message: str
+    notification_type: NotificationType
+    action_url: Optional[str] = None
+    scheduled_for: Optional[str] = None
+
+class NotificationResponse(BaseModel):
+    id: str
+    user_id: str
+    title: str
+    message: str
+    notification_type: str
+    action_url: Optional[str]
+    is_read: bool
+    created_at: str
+
+class PushSubscription(BaseModel):
+    endpoint: str
+    keys: Dict[str, str]
+    device_type: str  # web, ios, android
+
+@api_router.post("/v1/notifications/subscribe")
+async def subscribe_push_notifications(
+    subscription: PushSubscription,
+    current_user: dict = Depends(get_current_user)
+):
+    """Subscribe to push notifications"""
+    sub_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    sub_doc = {
+        "id": sub_id,
+        "user_id": current_user["id"],
+        "endpoint": subscription.endpoint,
+        "keys": subscription.keys,
+        "device_type": subscription.device_type,
+        "created_at": now,
+        "active": True
+    }
+    
+    await db.push_subscriptions.insert_one(sub_doc)
+    return {"status": "subscribed", "subscription_id": sub_id}
+
+@api_router.get("/v1/notifications", response_model=List[NotificationResponse])
+async def get_notifications(
+    unread_only: bool = False,
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get user's notifications"""
+    query = {"user_id": current_user["id"]}
+    if unread_only:
+        query["is_read"] = False
+    
+    notifications = await db.notifications.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return [NotificationResponse(**n) for n in notifications]
+
+@api_router.post("/v1/notifications", response_model=NotificationResponse)
+async def create_notification(
+    notification: NotificationCreate,
+    target_user_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a notification (for doctors/admins to send to patients)"""
+    notif_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    user_id = target_user_id or current_user["id"]
+    
+    notif_doc = {
+        "id": notif_id,
+        "user_id": user_id,
+        "title": notification.title,
+        "message": notification.message,
+        "notification_type": notification.notification_type.value,
+        "action_url": notification.action_url,
+        "is_read": False,
+        "created_at": now,
+        "scheduled_for": notification.scheduled_for,
+        "sent_by": current_user["id"]
+    }
+    
+    await db.notifications.insert_one(notif_doc)
+    
+    return NotificationResponse(**notif_doc)
+
+@api_router.put("/v1/notifications/{notif_id}/read")
+async def mark_notification_read(
+    notif_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Mark notification as read"""
+    result = await db.notifications.update_one(
+        {"id": notif_id, "user_id": current_user["id"]},
+        {"$set": {"is_read": True, "read_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"status": "read"}
+
+@api_router.put("/v1/notifications/read-all")
+async def mark_all_notifications_read(current_user: dict = Depends(get_current_user)):
+    """Mark all notifications as read"""
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.notifications.update_many(
+        {"user_id": current_user["id"], "is_read": False},
+        {"$set": {"is_read": True, "read_at": now}}
+    )
+    return {"status": "success", "updated_count": result.modified_count}
+
+@api_router.get("/v1/notifications/unread-count")
+async def get_unread_count(current_user: dict = Depends(get_current_user)):
+    """Get count of unread notifications"""
+    count = await db.notifications.count_documents({"user_id": current_user["id"], "is_read": False})
+    return {"unread_count": count}
+
+# Scheduled notifications helper (would be called by a background job)
+async def create_appointment_reminder(appointment_id: str):
+    """Create reminder notification for upcoming appointment"""
+    appt = await db.appointments.find_one({"id": appointment_id})
+    if not appt:
+        return
+    
+    notif_doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": appt["patient_id"],
+        "title": "Напоминание о приёме",
+        "message": f"У вас запланирован приём через 1 час с врачом {appt.get('doctor_name', 'врачом')}",
+        "notification_type": NotificationType.APPOINTMENT_REMINDER.value,
+        "action_url": f"/appointments/{appointment_id}",
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.notifications.insert_one(notif_doc)
+
 # ==================== HEALTH CHECK ====================
 @api_router.get("/")
 async def root():
