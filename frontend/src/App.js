@@ -139,6 +139,38 @@ const AppContent = () => {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/video-call/:appointmentId/:channelName"
+        element={
+          <ProtectedRoute>
+            <VideoCallPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/health-sync"
+        element={
+          <ProtectedRoute>
+            <HealthSyncPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/radiology"
+        element={
+          <ProtectedRoute>
+            <RadiologyPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/b2b"
+        element={
+          <ProtectedRoute>
+            <B2BClinicPage />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
