@@ -349,6 +349,214 @@ class MediNexusAPITester:
         self.run_test("Get Twin Timeline", "GET", "v1/twin/timeline", 200)
         self.run_test("Get Twin Timeline Limited", "GET", "v1/twin/timeline?limit=5", 200)
 
+    def test_video_calls(self):
+        """Test Agora Video Call functionality"""
+        self.log("=== VIDEO CALL TESTS ===")
+        
+        if not self.token:
+            self.log("❌ No auth token, skipping video tests", "SKIP")
+            return
+
+        # Test video token generation
+        token_data = {
+            "channel": "test-channel-123",
+            "appointment_id": "test-appointment-id"
+        }
+        
+        success, response = self.run_test(
+            "Generate Video Token",
+            "POST",
+            "v1/video/token",
+            200,
+            data=token_data
+        )
+        
+        if success:
+            self.log(f"✅ Video token generated: {response.get('token', '')[:20]}...", "SUCCESS")
+            
+            # Test end video call
+            self.run_test(
+                "End Video Call",
+                "POST",
+                f"v1/video/end/{token_data['appointment_id']}?duration_minutes=5",
+                200
+            )
+
+    def test_health_sync(self):
+        """Test Health Sync functionality"""
+        self.log("=== HEALTH SYNC TESTS ===")
+        
+        if not self.token:
+            self.log("❌ No auth token, skipping health sync tests", "SKIP")
+            return
+
+        # Test device connection
+        device_data = {
+            "device_type": "apple_health",
+            "device_id": "test-device-123"
+        }
+        
+        success, response = self.run_test(
+            "Connect Health Device",
+            "POST",
+            "v1/health-sync/connect",
+            200,
+            data=device_data
+        )
+        
+        # Test get connected devices
+        self.run_test("Get Connected Devices", "GET", "v1/health-sync/devices", 200)
+        
+        # Test sync health data
+        sync_data = {
+            "device_type": "apple_health",
+            "records": [
+                {
+                    "data_type": "steps",
+                    "value": 8500,
+                    "unit": "steps",
+                    "recorded_at": datetime.now().isoformat()
+                },
+                {
+                    "data_type": "heart_rate",
+                    "value": 72,
+                    "unit": "bpm",
+                    "recorded_at": datetime.now().isoformat()
+                }
+            ]
+        }
+        
+        self.run_test(
+            "Sync Health Data",
+            "POST",
+            "v1/health-sync/data",
+            200,
+            data=sync_data
+        )
+        
+        # Test health summary
+        self.run_test("Get Health Summary", "GET", "v1/health-sync/summary?days=7", 200)
+
+    def test_radiology_ai(self):
+        """Test Radiology AI functionality"""
+        self.log("=== RADIOLOGY AI TESTS ===")
+        
+        if not self.token:
+            self.log("❌ No auth token, skipping radiology tests", "SKIP")
+            return
+
+        # Test radiology analysis
+        analysis_data = {
+            "image_type": "ct",
+            "body_region": "chest",
+            "clinical_context": "Пациент жалуется на боль в груди, подозрение на пневмонию"
+        }
+        
+        success, response = self.run_test(
+            "Analyze Radiology Image",
+            "POST",
+            "v1/radiology/analyze",
+            200,
+            data=analysis_data
+        )
+        
+        if success:
+            # Wait for AI processing
+            time.sleep(3)
+            self.log(f"✅ Radiology AI analysis completed: {response.get('impression', '')[:50]}...", "SUCCESS")
+        
+        # Test get analyses history
+        self.run_test("Get Radiology Analyses", "GET", "v1/radiology/analyses", 200)
+
+    def test_b2b_clinic(self):
+        """Test B2B Clinic functionality"""
+        self.log("=== B2B CLINIC TESTS ===")
+        
+        if not self.token:
+            self.log("❌ No auth token, skipping B2B tests", "SKIP")
+            return
+
+        # Test clinic creation
+        clinic_data = {
+            "name": "Тестовая клиника MediNexus",
+            "address": "г. Москва, ул. Тестовая, д. 1",
+            "phone": "+7 999 123-45-67",
+            "email": "test-clinic@medinexus.com",
+            "specialties": ["Терапия", "Кардиология"]
+        }
+        
+        success, response = self.run_test(
+            "Create Clinic",
+            "POST",
+            "v1/b2b/clinic",
+            200,
+            data=clinic_data
+        )
+        
+        if success:
+            # Test get clinic
+            self.run_test("Get Clinic", "GET", "v1/b2b/clinic", 200)
+            
+            # Test clinic stats
+            self.run_test("Get Clinic Stats", "GET", "v1/b2b/clinic/stats", 200)
+            
+            # Test clinic patients
+            self.run_test("Get Clinic Patients", "GET", "v1/b2b/clinic/patients", 200)
+
+    def test_notifications(self):
+        """Test Push Notifications functionality"""
+        self.log("=== NOTIFICATIONS TESTS ===")
+        
+        if not self.token:
+            self.log("❌ No auth token, skipping notifications tests", "SKIP")
+            return
+
+        # Test push subscription
+        subscription_data = {
+            "endpoint": "https://fcm.googleapis.com/fcm/send/test-endpoint",
+            "keys": {
+                "p256dh": "test-p256dh-key",
+                "auth": "test-auth-key"
+            },
+            "device_type": "web"
+        }
+        
+        self.run_test(
+            "Subscribe Push Notifications",
+            "POST",
+            "v1/notifications/subscribe",
+            200,
+            data=subscription_data
+        )
+        
+        # Test create notification
+        notification_data = {
+            "title": "Тестовое уведомление",
+            "message": "Это тестовое уведомление для проверки системы",
+            "notification_type": "system"
+        }
+        
+        success, response = self.run_test(
+            "Create Notification",
+            "POST",
+            "v1/notifications",
+            200,
+            data=notification_data
+        )
+        
+        notif_id = response.get('id') if success else None
+        
+        # Test get notifications
+        self.run_test("Get Notifications", "GET", "v1/notifications", 200)
+        self.run_test("Get Unread Count", "GET", "v1/notifications/unread-count", 200)
+        
+        # Test mark as read
+        if notif_id:
+            self.run_test("Mark Notification Read", "PUT", f"v1/notifications/{notif_id}/read", 200)
+        
+        # Test mark all as read
+        self.run_test("Mark All Notifications Read", "PUT", "v1/notifications/read-all", 200)
+
     def run_all_tests(self):
         """Run all test suites"""
         start_time = datetime.now()
