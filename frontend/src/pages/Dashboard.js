@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { 
   Activity, Heart, Thermometer, Scale, Droplets, Brain,
   Calendar, FileText, TrendingUp, Clock, Plus, ChevronRight,
-  Bell, Settings, LogOut, User, Menu, X
+  Bell, Settings, LogOut, User, Menu, X, Watch, Scan, Building2
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
@@ -13,6 +13,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, Area
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { toast } from 'sonner';
+import NotificationsPanel, { useNotifications } from '../components/NotificationsPanel';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
