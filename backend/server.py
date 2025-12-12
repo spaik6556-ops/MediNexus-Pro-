@@ -43,6 +43,10 @@ JWT_EXPIRATION_HOURS = 24
 # LLM Key
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 
+# Agora Settings
+AGORA_APP_ID = os.environ.get('AGORA_APP_ID', 'demo_app_id')
+AGORA_APP_CERT = os.environ.get('AGORA_APP_CERTIFICATE', 'demo_app_cert')
+
 app = FastAPI(title="MediNexus Pro+ API", version="1.0.0")
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
