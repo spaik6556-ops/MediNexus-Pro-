@@ -885,14 +885,15 @@ async def create_vital(
     
     await db.vitals.insert_one(vital_doc)
     
-    # Add to twin events
+    # Add to twin events (create clean copy without _id)
+    clean_vital_doc = {k: v for k, v in vital_doc.items() if k != '_id'}
     event_doc = {
         "event_id": str(uuid.uuid4()),
         "patient_id": current_user["id"],
         "timestamp": now,
         "event_type": EventType.VITAL.value,
         "source_module": SourceModule.HEALTH_SYNC.value,
-        "data_payload": vital_doc,
+        "data_payload": clean_vital_doc,
         "clinical_confidence": 1.0,
         "access_scope": ["patient", "primary_doctor"]
     }
