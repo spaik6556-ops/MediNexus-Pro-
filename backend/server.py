@@ -91,6 +91,19 @@ class AppointmentStatus(str, Enum):
     CONFIRMED = "confirmed"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+    IN_PROGRESS = "in_progress"
+
+class NotificationType(str, Enum):
+    APPOINTMENT_REMINDER = "appointment_reminder"
+    MEDICATION_REMINDER = "medication_reminder"
+    LAB_RESULT = "lab_result"
+    DOCTOR_MESSAGE = "doctor_message"
+    SYSTEM = "system"
+
+class ClinicStatus(str, Enum):
+    PENDING = "pending"
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
 
 # ==================== MODELS ====================
 class UserCreate(BaseModel):
