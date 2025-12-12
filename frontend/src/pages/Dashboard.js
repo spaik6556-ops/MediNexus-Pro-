@@ -19,10 +19,12 @@ const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [aggregate, setAggregate] = useState(null);
   const [timeline, setTimeline] = useState([]);
   const [vitals, setVitals] = useState({});
   const [loading, setLoading] = useState(true);
+  const { unreadCount } = useNotifications();
 
   useEffect(() => {
     fetchDashboardData();
