@@ -14,6 +14,18 @@ import bcrypt
 import jwt
 from enum import Enum
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+import hashlib
+import time
+import base64
+
+# Agora Token Builder (simplified implementation)
+def build_agora_token(app_id: str, app_cert: str, channel: str, uid: int, expire_seconds: int = 3600) -> str:
+    """Generate Agora RTC token for video calls"""
+    timestamp = int(time.time()) + expire_seconds
+    info = f"{app_id}{channel}{uid}{timestamp}"
+    signature = hashlib.sha256(f"{info}{app_cert}".encode()).hexdigest()[:32]
+    token_data = f"{app_id}:{channel}:{uid}:{timestamp}:{signature}"
+    return base64.b64encode(token_data.encode()).decode()
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
