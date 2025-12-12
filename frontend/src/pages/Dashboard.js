@@ -59,6 +59,12 @@ const Dashboard = () => {
     { icon: Heart, label: 'План лечения', path: '/care-plan' },
   ];
 
+  // Extended nav for Phase 1
+  const extendedNavItems = [
+    { icon: Activity, label: 'Health Sync', path: '/health-sync' },
+    { icon: Brain, label: 'Radiology AI', path: '/radiology' },
+  ];
+
   const vitalCards = [
     { 
       key: 'heart_rate',
