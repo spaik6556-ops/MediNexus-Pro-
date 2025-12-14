@@ -16,6 +16,8 @@ import VideoCallPage from './pages/VideoCallPage';
 import HealthSyncPage from './pages/HealthSyncPage';
 import RadiologyPage from './pages/RadiologyPage';
 import B2BClinicPage from './pages/B2BClinicPage';
+import BillingPage from './pages/BillingPage';
+import HealthInsightsPage from './pages/HealthInsightsPage';
 
 import './App.css';
 
